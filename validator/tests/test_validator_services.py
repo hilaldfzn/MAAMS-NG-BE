@@ -2,6 +2,7 @@ import uuid
 from django.test import TestCase, TransactionTestCase
 from unittest.mock import patch, Mock, call, ANY
 from requests.exceptions import RequestException
+from groq import GroqError
 from validator.constants import FeedbackMsg, ErrorMsg
 from validator.enums import ValidationType
 from validator.exceptions import AIServiceErrorException
@@ -96,11 +97,10 @@ class CausesServiceTest(TransactionTestCase):
                     "content": user_prompt
                 }
             ],
-            model="deepseek-r1-distill-llama-70b",
+            model="openai/gpt-oss-120b",
             temperature=0.6,
             top_p=0.95,
             stream=False,
-            reasoning_format="hidden",
             seed=42
         )
 
@@ -220,8 +220,43 @@ class CausesServiceTest(TransactionTestCase):
                 validation_type=ValidationType.NORMAL,
                 request=self.mock_request
             )
-        
+
         self.assertEqual(str(context.exception), ErrorMsg.AI_SERVICE_ERROR)
+
+    @patch('validator.services.Groq')
+    def test_api_call_groq_error(self, mock_groq):
+        """Test API call handling errors raised by the Groq SDK (e.g. retired model, bad key)"""
+        mock_client = Mock()
+        mock_client.chat.completions.create.side_effect = GroqError("model_decommissioned")
+        mock_groq.return_value = mock_client
+
+        with self.assertRaises(AIServiceErrorException) as context:
+            self.service.api_call(
+                system_message="Test system message",
+                user_prompt="Is this cause valid? Answer only with True/False",
+                validation_type=ValidationType.NORMAL,
+                request=self.mock_request
+            )
+
+        self.assertEqual(str(context.exception), ErrorMsg.AI_SERVICE_ERROR)
+
+    @patch('validator.services.Groq')
+    def test_api_call_empty_content(self, mock_groq):
+        """Test API call treating an empty answer as a negative result instead of crashing"""
+        mock_client = Mock()
+        mock_chat_completion = Mock()
+        mock_chat_completion.choices = [Mock(message=Mock(content=None))]
+        mock_client.chat.completions.create.return_value = mock_chat_completion
+        mock_groq.return_value = mock_client
+
+        result = self.service.api_call(
+            system_message="Test system message",
+            user_prompt="Is this cause valid? Answer only with True/False",
+            validation_type=ValidationType.NORMAL,
+            request=self.mock_request
+        )
+
+        self.assertEqual(result, 0)
 
     @patch('validator.services.Groq')
     def test_api_call_unexpected_response(self, mock_groq):
