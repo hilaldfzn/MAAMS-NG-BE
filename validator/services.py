@@ -1,6 +1,6 @@
 import uuid
 from django.conf import settings
-from groq import Groq
+from groq import Groq, GroqError
 import requests
 from django.core.cache import cache
 from validator.constants import ErrorMsg, FeedbackMsg
@@ -20,9 +20,8 @@ from openinference.instrumentation.groq import GroqInstrumentor
 
 class CausesService:
     def api_call(self, system_message: str, user_prompt: str, validation_type: ValidationType, request=None) -> int:
-        client = Groq(api_key=settings.GROQ_API_KEY)
-        
         try:
+            client = Groq(api_key=settings.GROQ_API_KEY)
             chat_completion = client.chat.completions.create(
                 messages=[
                     {
@@ -34,17 +33,18 @@ class CausesService:
                         "content": user_prompt
                     }
                 ],
-                model="deepseek-r1-distill-llama-70b",
+                # deepseek-r1-distill-llama-70b was shut down by Groq on 2025-10-02. Reasoning models
+                # like gpt-oss return their reasoning in a separate field, so content is only the answer.
+                model=settings.GROQ_MODEL,
                 temperature=0.6,
                 top_p=0.95,
                 stream=False,
-                reasoning_format="hidden",
                 seed=42
             )
-            
-            answer = chat_completion.choices[0].message.content
-        
-        except requests.exceptions.RequestException:
+
+            answer = chat_completion.choices[0].message.content or ""
+
+        except (requests.exceptions.RequestException, GroqError):
             raise AIServiceErrorException(ErrorMsg.AI_SERVICE_ERROR)
         
         if validation_type in [ValidationType.NORMAL, ValidationType.ROOT]:

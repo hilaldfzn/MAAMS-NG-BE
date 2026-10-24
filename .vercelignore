@@ -1,0 +1,14 @@
+.venv
+venv
+env
+.env*
+db.sqlite3
+**/__pycache__
+**/*.pyc
+htmlcov
+staticfiles
+.github
+# pyproject.toml only holds semantic-release config; if uploaded, Vercel installs
+# dependencies from it (none) instead of requirements.txt
+pyproject.toml
+setup.py

@@ -1,0 +1,15 @@
+{
+  "regions": ["sin1"],
+  "builds": [
+    {
+      "src": "MAAMS_NG_BE/wsgi.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "MAAMS_NG_BE/wsgi.py"
+    }
+  ]
+}

@@ -33,11 +33,15 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-vv6@i-05#(1k&p8*mrixezpjmgdx0p_&c=o#4er_=fnd@xp1a+'
+SECRET_KEY = os.getenv('SECRET_KEY') or 'django-insecure-vv6@i-05#(1k&p8*mrixezpjmgdx0p_&c=o#4er_=fnd@xp1a+'
 
-DEBUG = True
+DEBUG = os.getenv('DEBUG', 'True').lower() == 'true'
 
 ALLOWED_HOSTS = ["*"]
+
+# Cloud Run and Vercel terminate TLS at their proxy; trust its header so redirects,
+# pagination links and the admin CSRF origin check use https
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 INSTALLED_APPS = [
     'corsheaders',
@@ -73,6 +77,7 @@ MIDDLEWARE = [
     'allauth.account.middleware.AccountMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -114,6 +119,8 @@ DATABASES = {
         conn_health_checks=True,
     )
 }
+# Pooled Postgres (Neon / PgBouncer in transaction mode) can't keep server-side cursors open
+DATABASES['default']['DISABLE_SERVER_SIDE_CURSORS'] = True
 
 # Test database settings
 if 'test' in sys.argv:
@@ -177,6 +184,11 @@ CORS_EXPOSE_HEADERS = [
 # https://docs.djangoproject.com/en/4.2/howto/static-files/
 
 STATIC_URL = 'static/'
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+# Serve admin/DRF assets straight from the installed apps, so serverless deploys
+# without a collectstatic step still get them
+WHITENOISE_USE_FINDERS = True
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
@@ -227,9 +239,6 @@ SOCIALACCOUNT_PROVIDERS = {
 
 AUTHENTICATION_BACKENDS = [
     'django.contrib.auth.backends.ModelBackend',
-    'authentication.backends.EmailOrUsernameModelBackend',
-    'authentication.backends.GoogleOAuthBackend',
-    'authentication.backends.SSOUIBackend',
     'allauth.account.auth_backends.AuthenticationBackend',
 ]
 
@@ -259,6 +268,7 @@ SPECTACULAR_SETTINGS = {
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+GROQ_MODEL = os.getenv("GROQ_MODEL", "openai/gpt-oss-120b")
 
 sentry_sdk.init(
     dsn=os.getenv("SENTRY_DSN"),
